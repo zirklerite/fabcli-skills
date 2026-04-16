@@ -1,0 +1,13 @@
+{
+  "name": "fabcli-skills",
+  "version": "0.1.0",
+  "description": "Claude Code skills for FabCLI — search, browse, and inspect Epic Games / Fab marketplace assets",
+  "author": {
+    "name": "zirklerite",
+    "email": "zirklerite@gmail.com"
+  },
+  "repository": "https://github.com/zirklerite/fabcli-skills",
+  "homepage": "https://github.com/zirklerite/fabcli-skills",
+  "license": "MIT",
+  "keywords": ["fab", "epic-games", "unreal-engine", "marketplace", "fabcli"]
+}
