@@ -32,8 +32,16 @@ FabCLI uses a **two-phase auth flow**:
    ```bash
    fabcli auth login
    ```
-   Opens the Epic authorization page in a browser. The user signs in
-   and pastes the authorization code back into the terminal.
+   If already authenticated, prints `{"ok":true,"already_authenticated":true}`
+   immediately — no window opens.
+
+   Otherwise opens a login window (native WebView). The user signs in
+   with Epic credentials + 2FA. The code is captured automatically — no
+   copy-paste needed. Window closes and the session is saved. Each login
+   uses a fresh session (no persistent cookies — enables account switching).
+
+   Use `fabcli auth login --manual` for the old paste flow if the
+   WebView isn't available.
 
 2. **Headless refresh** — every subsequent command loads the token,
    refreshes if expired, and runs without prompts. No user involvement.
@@ -42,8 +50,8 @@ FabCLI uses a **two-phase auth flow**:
 > "Your FabCLI session has expired. Please run `fabcli auth login`
 > in your terminal to re-authenticate, then I'll retry."
 
-Do NOT attempt to run `fabcli auth login` yourself — it requires an
-interactive TTY and a browser.
+Do NOT attempt to run `fabcli auth login` yourself — it requires
+user interaction (WebView window or TTY for paste).
 
 ### Auth commands
 
