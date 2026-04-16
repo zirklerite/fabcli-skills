@@ -154,8 +154,24 @@ Returns signed CDN URLs for downloading the asset's files.
 
 Response: `[{ "artifact_id", "asset_format", "distribution_points": [{ "url", "signature", ... }], "manifest_hash" }]`
 
-**FabCLI does NOT download bytes.** It emits the manifest with signed
-URLs. Use `curl` or `wget` to fetch the actual chunk files.
+### Download
+
+```bash
+fabcli fab download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/
+fabcli fab download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/ --platform Windows --jobs 16
+```
+
+Downloads all files: checks disk space first (needs ~2x asset size),
+parallel chunk fetching to temp files, SHA1 verification, file
+reassembly, directory structure preserved. No memory limit — works for
+any asset size. Writes `.fabcli-asset.json` sidecar with metadata for
+UE5CLI integration. Shows progress on stderr.
+
+Flags: `--artifact-id`, `--namespace`, `--asset-id` (required, from
+manifest/library output), `-o, --output` (required), `--platform`
+(optional), `--jobs` (default 8).
+
+Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir":"...","sidecar":".fabcli-asset.json"}`
 
 ## Common Recipes
 
@@ -177,17 +193,17 @@ fabcli fab ownership "$UID"
 # Check if .licenses is non-empty or .acquired is true
 ```
 
-### Recipe 3: Get download URLs for an owned asset
+### Recipe 3: Download an owned asset
 
 ```bash
 # 1. List library to find artifact info
 fabcli fab library --pretty
 
-# 2. Get the manifest (extract artifact_id, namespace, asset_id from library/listing output)
-fabcli fab manifest --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID"
+# 2. Download (artifact_id, namespace, asset_id from library output)
+fabcli fab download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./my-asset/
 
-# 3. Download via curl (from the distribution_points URLs in the response)
-curl -o chunk.bin "<signed_url_from_manifest>"
+# 3. If UE5CLI is available, install into project:
+# ue5cli install-asset ./my-asset/ --project C:\Projects\MyGame
 ```
 
 ### Recipe 4: Browse free Unreal Engine assets
@@ -226,10 +242,8 @@ the token file directly.
 
 ## What FabCLI Does NOT Do
 
-- **Does not download asset bytes** — use `fab manifest` to get signed
-  URLs, then `curl`/`wget` to fetch. FabCLI is for discovery and
-  metadata, not file transfer.
+- **Does not install assets into UE projects** — `fab download` puts
+  files in an output directory. Use UE5CLI (`ue5cli install-asset`)
+  for automated project placement, or move files manually.
 - **Does not manage Unreal Engine projects** — no project creation,
   plugin installation, or build management.
-- **Does not install assets into UE** — once you have the bytes, use
-  UE's own import tools.
