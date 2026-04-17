@@ -117,12 +117,19 @@ Response: `{ "uid", "title", "description", "listing_type", "user", "category", 
 ```bash
 fabcli fab formats <uid>
 fabcli fab formats --stdin
+fabcli fab formats <uid> --format unreal-engine
 ```
 
-Shows UE-specific format details: supported engine versions, target
-platforms, distribution method.
+Shows every format a listing exposes, enriched with the format-specific
+metadata: artifact versions (with `engineVersions` and
+`targetPlatforms`), distribution method, and technical details. Pass
+`--format <code>` (e.g. `unreal-engine`) to fetch a single format
+directly — cheaper and faster than the default fan-out.
 
-Response: `[{ "asset_format_type", "technical_specs": { "unreal_engine_engine_versions": ["5.3", "5.4"], "unreal_engine_target_platforms": ["Windows"], ... } }]`
+Exits `3` (`not_found`) if the listing or the requested `--format`
+code doesn't exist.
+
+Response: `[{ "assetFormatType": {"code":"unreal-engine", …}, "distributionMethod":"complete_project", "technicalDetails":"<p>…</p>", "versions": [{"artifactId":"…", "engineVersions":["UE_5.4","UE_5.5"], "targetPlatforms":["Windows"], "fileType":"source", "uid":"…"}, …] }]`
 
 ### Prices
 
