@@ -5,7 +5,7 @@ when_to_use: |
   Use when the user mentions: Fab, Epic Games Store, Unreal marketplace,
   Unreal assets, Fab library, asset search, asset download, marketplace
   pricing, asset reviews, or checking asset ownership.
-argument-hint: "[fab search|fab library|fab listing|auth status|...]"
+argument-hint: "[search|library|listing|claim|download|auth status|...]"
 ---
 
 # FabCLI — Agent Guide
@@ -78,12 +78,12 @@ fabcli auth status
 # → {"authenticated":true,"expires_at":"...","refreshed":false}
 ```
 
-## Fab Marketplace Commands
+## Commands
 
 ### Search
 
 ```bash
-fabcli fab search --query "medieval kitbash" --channel unreal-engine --free
+fabcli search --query "medieval kitbash" --channel unreal-engine --free
 ```
 
 Flags:
@@ -103,7 +103,7 @@ Response: `{ "results": [{ "uid", "title", "listing_type", "is_free", "is_discou
 ### Library
 
 ```bash
-fabcli fab library
+fabcli library
 ```
 
 Lists all Fab assets owned by the authenticated account. No arguments.
@@ -113,8 +113,8 @@ Response: `{ "results": [{ "uid", "title", ... }], "cursors": {...} }`
 ### Listing (detail)
 
 ```bash
-fabcli fab listing <uid>
-fabcli fab listing --stdin    # read UID from stdin pipe
+fabcli listing <uid>
+fabcli listing --stdin    # read UID from stdin pipe
 ```
 
 Fetches full detail for one listing: title, description, seller, ratings,
@@ -125,9 +125,9 @@ Response: `{ "uid", "title", "description", "listing_type", "user", "category", 
 ### Formats
 
 ```bash
-fabcli fab formats <uid>
-fabcli fab formats --stdin
-fabcli fab formats <uid> --format unreal-engine
+fabcli formats <uid>
+fabcli formats --stdin
+fabcli formats <uid> --format unreal-engine
 ```
 
 Shows every format a listing exposes, enriched with the format-specific
@@ -144,8 +144,8 @@ Response: `[{ "assetFormatType": {"code":"unreal-engine", …}, "distributionMet
 ### Prices
 
 ```bash
-fabcli fab prices <uid>                         # single listing
-fabcli fab prices --offer-ids id1,id2,id3       # bulk (comma-separated)
+fabcli prices <uid>                         # single listing
+fabcli prices --offer-ids id1,id2,id3       # bulk (comma-separated)
 ```
 
 Response (single): `[{ "offer_id", "price", "discounted_price", "discount_percentage", "currency_code" }]`
@@ -153,8 +153,8 @@ Response (single): `[{ "offer_id", "price", "discounted_price", "discount_percen
 ### Ownership
 
 ```bash
-fabcli fab ownership <uid>
-fabcli fab ownership --stdin
+fabcli ownership <uid>
+fabcli ownership --stdin
 ```
 
 Reports whether a listing is owned. With a Fab session
@@ -179,8 +179,8 @@ Response shape depends on which path ran; both include
 ### Claim (free assets only)
 
 ```bash
-fabcli fab claim <uid>
-fabcli fab claim --stdin
+fabcli claim <uid>
+fabcli claim --stdin
 ```
 
 Adds a free listing to the library. Requires a Fab session
@@ -208,9 +208,9 @@ verified afterward.
 ### Reviews
 
 ```bash
-fabcli fab reviews <uid>
-fabcli fab reviews <uid> --sort-by newest --cursor <c>
-fabcli fab reviews --stdin
+fabcli reviews <uid>
+fabcli reviews <uid> --sort-by newest --cursor <c>
+fabcli reviews --stdin
 ```
 
 Response: `{ "results": [{ "uid", "rating", "title", "content", "user": { "display_name" }, "created_at" }], "count", "cursors" }`
@@ -218,7 +218,7 @@ Response: `{ "results": [{ "uid", "rating", "title", "content", "user": { "displ
 ### Manifest (download URLs)
 
 ```bash
-fabcli fab manifest --artifact-id X --namespace Y --asset-id Z [--platform Windows]
+fabcli manifest --artifact-id X --namespace Y --asset-id Z [--platform Windows]
 ```
 
 Returns signed CDN URLs for downloading the asset's files.
@@ -228,8 +228,8 @@ Response: `[{ "artifact_id", "asset_format", "distribution_points": [{ "url", "s
 ### Download
 
 ```bash
-fabcli fab download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/
-fabcli fab download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/ --platform Windows --jobs 16
+fabcli download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/
+fabcli download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/ --platform Windows --jobs 16
 ```
 
 Downloads all files: checks disk space first (needs ~2x asset size),
@@ -250,17 +250,17 @@ Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir"
 
 ```bash
 # Search for assets
-fabcli fab search -q "sci-fi props" --channel unreal-engine
+fabcli search -q "sci-fi props" --channel unreal-engine
 
 # Inspect a specific result (pipe the UID)
-fabcli fab search -q "sci-fi props" | jq -r '.results[0].uid' | fabcli fab listing --stdin --pretty
+fabcli search -q "sci-fi props" | jq -r '.results[0].uid' | fabcli listing --stdin --pretty
 ```
 
 ### Recipe 2: Check ownership before recommending
 
 ```bash
 UID="some-listing-uid"
-fabcli fab ownership "$UID"
+fabcli ownership "$UID"
 # Check if .licenses is non-empty or .acquired is true
 ```
 
@@ -268,10 +268,10 @@ fabcli fab ownership "$UID"
 
 ```bash
 # 1. List library to find artifact info
-fabcli fab library --pretty
+fabcli library --pretty
 
 # 2. Download (artifact_id, namespace, asset_id from library output)
-fabcli fab download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./my-asset/
+fabcli download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./my-asset/
 
 # 3. If UE5CLI is available, install into project:
 # ue5cli install-asset ./my-asset/ --project C:\Projects\MyGame
@@ -280,7 +280,7 @@ fabcli fab download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o
 ### Recipe 4: Browse free Unreal Engine assets
 
 ```bash
-fabcli fab search --free --channel unreal-engine --sort -createdAt --count 20
+fabcli search --free --channel unreal-engine --sort -createdAt --count 20
 ```
 
 ## Exit Codes
