@@ -184,9 +184,9 @@ fabcli claim --stdin
 ```
 
 Adds a free listing to the library. Requires a Fab session
-(`auth fab-login`). **Cannot be used to purchase paid assets** —
-any non-free listing returns a structured "not_free" response
-without issuing any claim request.
+(established during `auth login`). **Cannot be used to purchase
+paid assets** — any non-free listing returns a structured "not_free"
+response without issuing any claim request.
 
 Responses (all exit 0 unless noted):
 
@@ -200,6 +200,11 @@ Responses (all exit 0 unless noted):
 // Paid asset — no purchase made; informational
 {"ok":false,"reason":"not_free","title":"...","uid":"...","price":3777.73,"currency":"TWD","purchase_url":"https://www.fab.com/listings/..."}
 ```
+
+**IMPORTANT for agents:** Exit code 0 does NOT always mean "claimed."
+Always check the `ok` field: `ok: true` = claimed or already owned,
+`ok: false` = not claimed (paid asset). Parse the `reason` field for
+specifics.
 
 Exits `2` (auth_required) with a clear message if no Fab session exists.
 Exits `1` if the POST succeeded but ownership couldn't be
@@ -243,6 +248,34 @@ manifest/library output), `-o, --output` (required), `--platform`
 (optional), `--jobs` (default 8).
 
 Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir":"...","sidecar":".fabcli-asset.json"}`
+
+## Fab Pricing Model
+
+Fab's pricing has three "free" conditions — understanding them is
+essential for correct `--free` filtering and `claim` behavior:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `isFree` | bool | Permanently free asset (rare) |
+| `startingPrice.price` | float | Full price in user's local currency |
+| `startingPrice.discountedPrice` | float/null | Price after discount (null if no active discount) |
+| `startingPrice.currencyCode` | string | User's currency code (e.g. "TWD", "USD", "EUR") |
+
+**An asset is claimable for free if ANY of these are true:**
+- `isFree == true` (permanently free)
+- `price == 0` ($0 asset, `isFree` may still be `false`)
+- `discountedPrice == 0` (100% discount, temporarily free)
+
+**The `--free` flag on `search`** sends `is_free=true` to the API AND
+applies client-side filtering to also include `price==0` and
+`discountedPrice==0` results. This catches all three free conditions.
+
+**`claim`** uses the same three-condition check. Paid assets are
+hard-blocked — the POST is never sent. The response includes the
+price and a `purchase_url` for the user to buy manually.
+
+**Note:** prices are in the user's local currency (determined by
+their Epic account region), not USD.
 
 ## Common Recipes
 
