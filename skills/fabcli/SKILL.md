@@ -57,10 +57,20 @@ user interaction (WebView window or TTY for paste).
 
 | Command | What it does |
 |---|---|
-| `fabcli auth login` | Interactive login (opens browser, requires TTY) |
-| `fabcli auth logout` | Invalidate session + delete token file |
-| `fabcli auth status` | Check if session is valid (headless) |
+| `fabcli auth login` | Interactive Epic OAuth login (opens browser) |
+| `fabcli auth fab-login` | Establish a Fab web session — needed for `fab claim` and rich `fab ownership`. Opens a WebView; Epic auto-approves if your `auth login` session is still fresh. |
+| `fabcli auth logout` | Invalidate both Epic and Fab sessions; delete token + WebView data folder |
+| `fabcli auth status` | Check if Epic session is valid (headless) |
 | `fabcli auth whoami` | Print account_id, display_name, email as JSON |
+
+Two-step onboarding (once per ~90 days):
+```bash
+fabcli auth login       # Epic OAuth — unlocks search, library, download, ...
+fabcli auth fab-login   # Fab web session — unlocks claim, rich ownership
+```
+
+`auth fab-login` skips the WebView if a fresh session already exists
+(>7 days of validity). Pass `--force` to rerun anyway.
 
 Check session before running commands:
 ```bash
@@ -147,7 +157,53 @@ fabcli fab ownership <uid>
 fabcli fab ownership --stdin
 ```
 
-Response: `{ "licenses": [{ ... }] }` — check whether `acquired` is true.
+Reports whether a listing is owned. With a Fab session
+(`auth fab-login` has been run), queries
+`/i/users/me/listings-states/{uid}` through a hidden WebView and
+returns richer state (entitlement id, held licenses, wishlist
+flag). Without a session, falls back to matching the listing UID
+against the user's library (`customAttributes[].ListingIdentifier`)
+— works on headless systems too.
+
+Response shape depends on which path ran; both include
+`listingUid`, `owned`, and a `source` field identifying the path:
+
+```json
+// Fab-session path
+{"listingUid":"...","owned":true,"source":"fab_session","state":{"acquired":true,"entitlementId":"...","ownership":[...],"wishlisted":false,...}}
+
+// Library-derived path (no session, or session expired)
+{"listingUid":"...","owned":true,"source":"library","entitlement":{"assetId":"...","title":"...","projectVersions":[...]}}
+```
+
+### Claim (free assets only)
+
+```bash
+fabcli fab claim <uid>
+fabcli fab claim --stdin
+```
+
+Adds a free listing to the library. Requires a Fab session
+(`auth fab-login`). **Cannot be used to purchase paid assets** —
+any non-free listing returns a structured "not_free" response
+without issuing any claim request.
+
+Responses (all exit 0 unless noted):
+
+```json
+// Free asset successfully claimed
+{"ok":true,"claimed":true,"title":"FREE Mayonnaise","uid":"..."}
+
+// Already in library (idempotent re-run)
+{"ok":true,"already_owned":true,"title":"...","uid":"..."}
+
+// Paid asset — no purchase made; informational
+{"ok":false,"reason":"not_free","title":"...","uid":"...","price":3777.73,"currency":"TWD","purchase_url":"https://www.fab.com/listings/..."}
+```
+
+Exits `2` (auth_required) with a clear message if no Fab session exists.
+Exits `1` if the POST succeeded but ownership couldn't be
+verified afterward.
 
 ### Reviews
 
