@@ -155,6 +155,9 @@ Response (single): `[{ "offer_id", "price", "discounted_price", "discount_percen
 ```bash
 fabcli ownership <uid>
 fabcli ownership --stdin
+fabcli ownership --batch uid1,uid2,uid3     # batch (CSV)
+fabcli ownership --from-stdin                # batch (newline-delimited)
+fabcli ownership --from-library              # every UID in the library
 ```
 
 Reports whether a listing is owned. With a Fab session
@@ -174,7 +177,12 @@ Response shape depends on which path ran; both include
 
 // Library-derived path (no session, or session expired)
 {"listingUid":"...","owned":true,"source":"library","entitlement":{"assetId":"...","title":"...","projectVersions":[...]}}
+
+// Batch (any `--batch` / `--from-stdin` / `--from-library` flag)
+{"ok":true,"results":[{...},{...},{...}],"meta":{"total":3}}
 ```
+
+Single-UID calls still emit the flat shape for back-compat.
 
 ### Claim (free assets only)
 
@@ -209,6 +217,41 @@ specifics.
 Exits `2` (auth_required) with a clear message if no Fab session exists.
 Exits `1` if the POST succeeded but ownership couldn't be
 verified afterward.
+
+### Claim-batch (many free assets in one go)
+
+```bash
+fabcli claim-batch --uids uid1,uid2,uid3
+fabcli claim-batch --stdin                    # newline-delimited UIDs
+fabcli claim-batch --from-stdin-json          # JSON: {"results":[{"uid":…}]} or [{"uid":…}]
+fabcli claim-batch --from-library             # every UID from the library
+```
+
+Runs the full `claim` pre-flight + POST + verify sequence for each
+UID. Response shape:
+
+```json
+{
+  "ok": true,
+  "results": [
+    {"uid":"...","ok":true,"claimed":true,"title":"..."},
+    {"uid":"...","ok":true,"already_owned":true,"title":"..."},
+    {"uid":"...","ok":false,"reason":"not_free","price":3777.73,"currency":"TWD","purchase_url":"..."}
+  ],
+  "meta": {"total":3,"claimed":1,"already_owned":1,"skipped_paid":1,"failed":0}
+}
+```
+
+Exit `0` unless any UID errored (`meta.failed > 0`), in which case
+exit `1` with partial results still emitted. All per-UID safety
+properties of `claim` hold: no paid asset is ever POSTed.
+
+**Batching tip:** All batch commands (`claim-batch`, `ownership
+--batch*`) keep a background browser daemon alive between UIDs on
+Windows. First UID pays the ~1–2s WebView startup; subsequent UIDs
+are ~100ms each. Use batches over loops whenever you have more
+than 2 UIDs. Set `FABCLI_NO_DAEMON=1` to bypass the daemon for
+debugging.
 
 ### Reviews
 
@@ -343,6 +386,31 @@ FABCLI_TOKEN_PATH=/tmp/alt-token.json fabcli auth status
 
 Prefer `fabcli auth status` to check auth state rather than inspecting
 the token file directly.
+
+## Recipes
+
+### Claim every new free asset this month
+
+```bash
+fabcli search --free --sort=-createdAt --count 50 \
+  | fabcli claim-batch --from-stdin-json
+```
+
+The search emits `{results:[{uid,…},…]}`; `claim-batch --from-stdin-json`
+extracts the UIDs, reuses the browser daemon across every UID, and
+emits a single aggregate `{ok, results, meta}` envelope. Typically
+~100ms per UID after daemon warm-up vs. ~1-2s if you'd looped
+`fabcli claim <uid>` one at a time.
+
+### Re-verify ownership across the entire library
+
+```bash
+fabcli ownership --from-library
+```
+
+Useful as a periodic sanity check that every library entry is still
+marked acquired on the server side — or as a source for `fabcli
+download` on everything owned.
 
 ## What FabCLI Does NOT Do
 
