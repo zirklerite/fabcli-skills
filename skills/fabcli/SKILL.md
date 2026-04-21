@@ -104,11 +104,29 @@ Response: `{ "results": [{ "uid", "title", "listing_type", "is_free", "is_discou
 
 ```bash
 fabcli library
+fabcli library --count 500        # larger per-page, fewer round-trips
 ```
 
-Lists all Fab assets owned by the authenticated account. No arguments.
+Lists all Fab assets owned by the authenticated account. Internally
+paginates through Fab's `/e/accounts/<id>/ue/library` endpoint until
+exhausted.
 
 Response: `{ "results": [{ "uid", "title", ... }], "cursors": {...} }`
+
+**Tuning `--count`** (empirical, as of 2026-04-21; re-test if Fab
+changes behaviour):
+
+| `--count` | behaviour |
+| --- | --- |
+| 100 (default) | Safe; works everywhere. ~12 round-trips for a 1k-item library. |
+| **500** | Accepted; ~3× fewer requests; measurably faster on large libraries. Recommended for bulk workflows. |
+| 1000 | Accepted but returns slightly fewer items than exist (off-by-a-few); don't rely on it. |
+| 2000+ | Fab returns an empty page; effectively the cap. |
+
+If Fab changes the cap, re-probe with `fabcli library --count <N>`
+and compare `results.length` across values — the largest value that
+still returns the full library is today's sweet spot. Drop back to
+100 whenever something looks off.
 
 ### Listing (detail)
 
