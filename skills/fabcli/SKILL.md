@@ -91,14 +91,22 @@ Flags:
 - `--channel` — e.g. "unreal-engine"
 - `--type` — e.g. "3d-model", "tool-and-plugin", "audio"
 - `--category` — category filter
-- `--sort` — "-relevance" (default), "-createdAt", "price", etc.
+- `--sort` — `-relevance` (default), `-createdAt`, `createdAt`, `-price`, `price`. Leading `-` means descending (Fab API convention). Both `--sort=-createdAt` and `--sort "-createdAt"` work.
 - `--count` — results per page
 - `--cursor` — pagination cursor from previous results
 - `--free` — only free assets
 - `--discounted` — only discounted assets
 - `--seller` — filter by seller name
+- `--since <DATE|Nd>` — return only assets published on or after the cutoff. Accepts `YYYY-MM-DD`, RFC 3339, or relative `7d`/`30d`. Auto-paginates through Fab's cursors and stops at the first page whose oldest item falls before the cutoff — dramatically cutting API pages for "last week" / "this month" queries. Pair with `--sort=-createdAt` (or leave `--sort` unset) for early-stop to kick in; other sorts fall back to full-traversal with a stderr hint.
 
-Response: `{ "results": [{ "uid", "title", "listing_type", "is_free", "is_discounted", ... }], "count", "cursors": { "next", "previous" } }`
+Response: `{ "results": [{ "uid", "title", "listing_type", "is_free", "is_discounted", "user", "ratings", "seller", "rating", ... }], "count", "cursors": { "next", "previous" } }`
+
+Each result row carries two convenience fields alongside the raw Fab
+shape:
+- `seller`: `user.sellerName` trimmed; `null` if absent or blank
+- `rating`: `ratings.averageRating` as a number, or `null`
+
+Raw `user` and `ratings` objects are preserved unchanged for full-fidelity consumers.
 
 ### Library
 
@@ -407,18 +415,30 @@ the token file directly.
 
 ## Recipes
 
+### Find new free assets this week
+
+```bash
+fabcli search --free --since 7d
+```
+
+`--since 7d` auto-paginates and stops at the first page whose oldest
+item is more than 7 days old, so you get just the recent slice
+instead of the entire catalog. Combine with relative windows (`30d`,
+`90d`) or ISO dates (`--since 2026-04-01`) as needed.
+
 ### Claim every new free asset this month
 
 ```bash
-fabcli search --free --sort=-createdAt --count 50 \
+fabcli search --free --since 30d \
   | fabcli claim-batch --from-stdin-json
 ```
 
-The search emits `{results:[{uid,…},…]}`; `claim-batch --from-stdin-json`
-extracts the UIDs, reuses the browser daemon across every UID, and
-emits a single aggregate `{ok, results, meta}` envelope. Typically
-~100ms per UID after daemon warm-up vs. ~1-2s if you'd looped
-`fabcli claim <uid>` one at a time.
+Search returns only the last 30 days' worth of free assets (fewer
+Fab API pages). `claim-batch --from-stdin-json` extracts the UIDs,
+reuses the browser daemon across every UID, and emits a single
+aggregate `{ok, results, meta}` envelope. Typically ~100ms per UID
+after daemon warm-up vs. ~1–2s if you'd looped `fabcli claim <uid>`
+one at a time.
 
 ### Re-verify ownership across the entire library
 
