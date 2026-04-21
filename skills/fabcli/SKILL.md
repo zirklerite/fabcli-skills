@@ -136,6 +136,71 @@ and compare `results.length` across values — the largest value that
 still returns the full library is today's sweet spot. Drop back to
 100 whenever something looks off.
 
+#### Library cache (opt-in)
+
+The library endpoint is the slowest thing FabCLI talks to — Fab
+serves it at ~10 items/second, so a 1k-item library takes
+~100 seconds to paginate. To skip redundant fetches, FabCLI ships an
+opt-in on-disk cache:
+
+```bash
+export FABCLI_LIBRARY_CACHE=1    # enable cache for this session
+fabcli library                   # first call: fetches, writes cache
+fabcli library                   # second call: reads cache (~10 ms)
+fabcli ownership --from-library  # also reads cache
+fabcli claim-batch --from-library # also reads cache
+```
+
+Flags (all override the env per-call):
+
+| Flag | Meaning |
+| --- | --- |
+| `--cache` | Read-if-fresh / write on miss for this invocation. |
+| `--no-cache` | Bypass read and write for this invocation. |
+| `--refresh` | Force a live fetch and overwrite the cache. |
+| `--clear` | Delete the cache file and exit. No network call. |
+
+Env vars:
+
+- `FABCLI_LIBRARY_CACHE` — `1` / `true` / `yes` enables cache
+  reads and writes. Anything else leaves today's always-live
+  behaviour intact.
+- `FABCLI_LIBRARY_CACHE_TTL` — seconds; default `3600` (1 hour).
+  `0` effectively disables reads without unsetting the main env.
+
+**Strict env gating.** If `FABCLI_LIBRARY_CACHE` is not set,
+FabCLI will NOT read an existing cache file, even if it's fresh —
+the cache only activates when you explicitly opt in. Set it once
+per script/session (or use `--cache` per call).
+
+**Which commands read the cache** (when enabled):
+
+- `fabcli library`
+- `fabcli ownership --from-library`
+- `fabcli ownership --batch <uids>` (bearer-only fallback path
+  without a Fab session)
+- `fabcli ownership <uid>` (same bearer-only fallback)
+- `fabcli claim-batch --from-library`
+
+Every other command is unaffected (they don't touch the library).
+
+**Invalidation guarantee.** A successful `fabcli claim` or
+`fabcli claim-batch` deletes the cache file before returning, so
+the next library read sees the newly-owned asset without waiting
+for the TTL to lapse. `fabcli auth logout` also deletes the cache
+alongside the webview-data folder.
+
+**Data-at-rest.** The file contains asset metadata only — no
+tokens, cookies, or CSRF secrets. On Unix, written with mode
+`0600` (user-only read/write), mirroring the token file's
+hygiene. A leak is a privacy concern (asset list disclosure),
+not a credential concern.
+
+Account safety: the cache file carries the Epic `account_id` in
+its envelope and self-invalidates on mismatch. Swapping
+`token.json` between Fab accounts without `auth logout` still
+triggers a fresh fetch for the new account on first read.
+
 ### Listing (detail)
 
 ```bash
@@ -415,6 +480,11 @@ the token file directly.
 
 ## Recipes
 
+> **Tip**: for any recipe that touches the library (directly or via
+> `--from-library`), preface with `export FABCLI_LIBRARY_CACHE=1`
+> so repeated library reads come from disk instead of re-paginating.
+> See "Library cache (opt-in)" in the Library section for details.
+
 ### Find new free assets this week
 
 ```bash
@@ -429,6 +499,8 @@ instead of the entire catalog. Combine with relative windows (`30d`,
 ### Claim every new free asset this month
 
 ```bash
+export FABCLI_LIBRARY_CACHE=1     # speed up any library reads below
+
 fabcli search --free --since 30d \
   | fabcli claim-batch --from-stdin-json
 ```
@@ -438,7 +510,9 @@ Fab API pages). `claim-batch --from-stdin-json` extracts the UIDs,
 reuses the browser daemon across every UID, and emits a single
 aggregate `{ok, results, meta}` envelope. Typically ~100ms per UID
 after daemon warm-up vs. ~1–2s if you'd looped `fabcli claim <uid>`
-one at a time.
+one at a time. The `claim-batch` auto-invalidates the library cache
+on any successful claim, so subsequent `ownership --from-library`
+calls see the newly-owned asset without waiting for the TTL.
 
 ### Re-verify ownership across the entire library
 
