@@ -60,7 +60,7 @@ user interaction (WebView window or TTY for paste).
 | `fabcli auth login` | Interactive Epic OAuth login (opens browser) |
 | `fabcli auth fab-login` | Establish a Fab web session — needed for `fab claim` and rich `fab ownership`. Opens a WebView; Epic auto-approves if your `auth login` session is still fresh. |
 | `fabcli auth logout` | Invalidate both Epic and Fab sessions; delete token + WebView data folder |
-| `fabcli auth status` | Check if Epic session is valid (headless) |
+| `fabcli auth status` | Check Epic + Fab session health in one call (headless) |
 | `fabcli auth whoami` | Print account_id, display_name, email as JSON |
 
 Two-step onboarding (once per ~90 days):
@@ -75,8 +75,47 @@ fabcli auth fab-login   # Fab web session — unlocks claim, rich ownership
 Check session before running commands:
 ```bash
 fabcli auth status
-# → {"authenticated":true,"expires_at":"...","refreshed":false}
+# → {
+#     "authenticated": true,
+#     "expires_at": "...", "refreshed": false,
+#     "fab": {
+#       "session_present": true,
+#       "expires_at": "2026-07-16T05:58:58+00:00",
+#       "days_remaining": 82,
+#       "needs_refresh": false
+#     }
+#   }
 ```
+
+#### Session health
+
+`auth status` reports **both** sessions in one JSON object:
+
+| Session | Lifetime | Auto-refresh? |
+| --- | --- | --- |
+| Epic OAuth (top-level `expires_at`) | ~36h access + ~1y refresh | Yes — every command silently refreshes |
+| Fab (`fab` block) | 90 days | No — must re-run `fabcli auth fab-login` manually |
+
+Use `fab.needs_refresh: true` as the signal to re-run
+`fabcli auth fab-login`. It's `true` when the session is expired
+**or** expires within the warn threshold (default 7 days,
+overridable via `FABCLI_FAB_SESSION_WARN_DAYS`). When no Fab session
+is persisted, the `fab` block is `{"session_present": false,
+"needs_refresh": true}`.
+
+**Proactive stderr warning.** When you run a Fab-gated command
+(`claim`, `claim-batch`, rich `ownership`) with a session within
+the warn threshold, FabCLI prints one line to stderr (not stdout,
+so JSON pipelines are unaffected):
+
+```
+WARNING: Fab session expires in 5 days; run 'fabcli auth fab-login' to refresh.
+```
+
+Fires at most once per CLI invocation — a 30-UID `claim-batch`
+doesn't spam. Disable entirely with `FABCLI_FAB_SESSION_WARN_DAYS=0`.
+`auth status` itself does NOT emit the stderr warning (its JSON is
+the signal for that command).
 
 ## Commands
 
