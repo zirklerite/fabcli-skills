@@ -19,10 +19,27 @@ human-readable output). Errors go to stderr as structured JSON.
 FabCLI must be on PATH. Verify: `fabcli --version`
 
 If not installed, the user needs to:
-1. Download the latest release ZIP from the releases page
-2. Unzip to a permanent location
-3. Run `install.bat` inside the extracted folder (adds to PATH)
+1. Download the latest release ZIP (Windows) or tar.gz (Linux) from
+   the releases page
+2. Unpack to a permanent location
+3. Run the installer inside the extracted folder:
+   - Windows: `install.bat`
+   - Linux: `./install.sh` (symlinks `~/.local/bin/fabcli`)
 4. Open a new terminal
+
+### Linux support
+
+Two Linux binaries ship per release:
+
+| Variant | Runtime deps | Fab-session commands (`claim`, rich `ownership`) |
+|---|---|---|
+| **Full** (`fabcli-v*-linux64-full-*.tar.gz`) | `libgtk-3-0`, `libwebkit2gtk-4.1-0`, `libsoup-3.0-0` | ✅ supported |
+| **Slim** (`fabcli-v*-linux64-slim-*.tar.gz`) | none (static musl) | ❌ fails with `"This fabcli build has no WebView support (slim/no-default-features)..."` |
+
+Known-good distro: **Ubuntu 22.04 LTS** (reference baseline) and 24.04.
+The daemon path that accelerates `claim-batch` is Windows-only today —
+on Linux each call spins up a fresh WebView (~1–2 s per UID). If a user
+hits the slim-build error, direct them to the full tarball.
 
 ## Authentication
 
