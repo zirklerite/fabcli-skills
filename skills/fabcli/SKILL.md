@@ -49,16 +49,18 @@ FabCLI uses a **two-phase auth flow**:
    ```bash
    fabcli auth login
    ```
-   If already authenticated, prints `{"ok":true,"already_authenticated":true}`
-   immediately — no window opens.
+   A single `auth login` establishes **both** the Epic OAuth session
+   (unlocks search, library, download, ...) and the Fab web session
+   (unlocks `claim` and rich `ownership`) in one WebView flow.
 
-   Otherwise opens a login window (native WebView). The user signs in
-   with Epic credentials + 2FA. The code is captured automatically — no
-   copy-paste needed. Window closes and the session is saved. Each login
-   uses a fresh session (no persistent cookies — enables account switching).
+   If both sessions are already valid, prints
+   `{"ok":true,"already_authenticated":true}` immediately — no
+   window opens. Otherwise the login window appears, the user signs in
+   with Epic credentials + 2FA once, and the code is captured
+   automatically.
 
-   Use `fabcli auth login --manual` for the old paste flow if the
-   WebView isn't available.
+   Use `fabcli auth login --manual` for the paste flow if the WebView
+   isn't available.
 
 2. **Headless refresh** — every subsequent command loads the token,
    refreshes if expired, and runs without prompts. No user involvement.
@@ -74,20 +76,19 @@ user interaction (WebView window or TTY for paste).
 
 | Command | What it does |
 |---|---|
-| `fabcli auth login` | Interactive Epic OAuth login (opens browser) |
-| `fabcli auth fab-login` | Establish a Fab web session — needed for `fab claim` and rich `fab ownership`. Opens a WebView; Epic auto-approves if your `auth login` session is still fresh. |
+| `fabcli auth login` | Combined Epic + Fab login (one WebView, one 2FA). Skips the window if both sessions are already fresh. |
 | `fabcli auth logout` | Invalidate both Epic and Fab sessions; delete token + WebView data folder |
 | `fabcli auth status` | Check Epic + Fab session health in one call (headless) |
 | `fabcli auth whoami` | Print account_id, display_name, email as JSON |
 
-Two-step onboarding (once per ~90 days):
-```bash
-fabcli auth login       # Epic OAuth — unlocks search, library, download, ...
-fabcli auth fab-login   # Fab web session — unlocks claim, rich ownership
-```
+> **Deprecated:** `fabcli auth fab-login` still exists as a hidden
+> alias that forwards to `auth login` and prints a `[DEPRECATED]`
+> notice on stderr. Always use `auth login` in new code.
 
-`auth fab-login` skips the WebView if a fresh session already exists
-(>7 days of validity). Pass `--force` to rerun anyway.
+Single-step onboarding (once per ~90 days):
+```bash
+fabcli auth login       # unlocks everything — search, library, claim, ownership, download, ...
+```
 
 Check session before running commands:
 ```bash
@@ -111,10 +112,10 @@ fabcli auth status
 | Session | Lifetime | Auto-refresh? |
 | --- | --- | --- |
 | Epic OAuth (top-level `expires_at`) | ~36h access + ~1y refresh | Yes — every command silently refreshes |
-| Fab (`fab` block) | 90 days | No — must re-run `fabcli auth fab-login` manually |
+| Fab (`fab` block) | 90 days | No — must re-run `fabcli auth login` manually |
 
 Use `fab.needs_refresh: true` as the signal to re-run
-`fabcli auth fab-login`. It's `true` when the session is expired
+`fabcli auth login`. It's `true` when the session is expired
 **or** expires within the warn threshold (default 7 days,
 overridable via `FABCLI_FAB_SESSION_WARN_DAYS`). When no Fab session
 is persisted, the `fab` block is `{"session_present": false,
@@ -126,7 +127,7 @@ the warn threshold, FabCLI prints one line to stderr (not stdout,
 so JSON pipelines are unaffected):
 
 ```
-WARNING: Fab session expires in 5 days; run 'fabcli auth fab-login' to refresh.
+WARNING: Fab session expires in 5 days; run 'fabcli auth login' to refresh.
 ```
 
 Fires at most once per CLI invocation — a 30-UID `claim-batch`
@@ -307,8 +308,8 @@ fabcli ownership --from-stdin                # batch (newline-delimited)
 fabcli ownership --from-library              # every UID in the library
 ```
 
-Reports whether a listing is owned. With a Fab session
-(`auth fab-login` has been run), queries
+Reports whether a listing is owned. With a Fab session (established
+automatically by `auth login`), queries
 `/i/users/me/listings-states/{uid}` through a hidden WebView and
 returns richer state (entitlement id, held licenses, wishlist
 flag). Without a session, falls back to matching the listing UID
