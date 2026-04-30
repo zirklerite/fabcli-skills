@@ -140,21 +140,121 @@ the signal for that command).
 ### Search
 
 ```bash
-fabcli search --query "medieval kitbash" --channel unreal-engine --free
+fabcli search --query "medieval kitbash" --filter channels=unreal-engine --filter is_free=1
 ```
 
-Flags:
-- `-q, --query` — text search
-- `--channel` — e.g. "unreal-engine"
-- `--type` — e.g. "3d-model", "tool-and-plugin", "audio"
-- `--category` — category filter
-- `--sort` — `-relevance` (default), `-createdAt`, `createdAt`, `-price`, `price`. Leading `-` means descending (Fab API convention). Both `--sort=-createdAt` and `--sort "-createdAt"` work.
-- `--count` — results per page
-- `--cursor` — pagination cursor from previous results
-- `--free` — only free assets
-- `--discounted` — only discounted assets
-- `--seller` — filter by seller name
-- `--since <DATE|Nd>` — return only assets published on or after the cutoff. Accepts `YYYY-MM-DD`, RFC 3339, or relative `7d`/`30d`. Auto-paginates through Fab's cursors and stops at the first page whose oldest item falls before the cutoff — dramatically cutting API pages for "last week" / "this month" queries. Pair with `--sort=-createdAt` (or leave `--sort` unset) for early-stop to kick in; other sorts fall back to full-traversal with a stderr hint.
+**Mental model:** every search parameter is a Fab URL key. Use
+`--filter <KEY=VALUE>` (repeatable) for any filter. The four other
+flags are non-filter concerns: `--query` (text), `--sort` (ordering),
+`--count` and `--cursor` (pagination).
+
+Flags (five total):
+- `-q, --query` — text search.
+- `--sort` — see "Known sort values" below. Leading `-` means
+  descending (Fab API convention). Both `--sort=-createdAt` and
+  `--sort "-createdAt"` work.
+- `--count` — results per page.
+- `--cursor` — pagination cursor from previous results.
+- `--filter <KEY=VALUE>` — repeatable. Each occurrence emits one
+  `?KEY=VALUE` query param (URL-encoded value, raw key). Repeated
+  same-key invocations preserve order — Fab's multi-valued
+  convention. See "How to do X" recipes and "Known Fab filter keys"
+  below.
+
+#### How to do X (recipes)
+
+| Use case | Invocation |
+| --- | --- |
+| Free assets only | `--filter is_free=1` |
+| Discounted assets | `--filter is_discounted=true` |
+| Limited Time Free (100% off paid items) | `--filter min_discount_percentage=100` |
+| Filter by channel | `--filter channels=unreal-engine` |
+| Multiple channels (OR / union) | `--filter channels=unity --filter channels=unreal-engine` |
+| Filter by listing type | `--filter listing_types=3d-model` |
+| Filter by category | `--filter categories=<slug>` |
+| Filter by seller | `--filter seller=<name>` |
+| Multi-style (AND / narrowing) | `--filter styles=anime --filter styles=lowpoly` |
+| Technical feature | `--filter technical_features=rigged` |
+| Asset format | `--filter asset_formats=metahuman` |
+| License | `--filter licenses=cc-by` |
+| Rating range | `--filter min_average_rating=4 --filter max_average_rating=5` |
+| Price range | `--filter min_price=0 --filter max_price=20` |
+| Published in last 7 days | `--filter published_since=YYYY-MM-DD` (caller computes `today - 7d`) |
+| Published since specific date | `--filter published_since=2026-04-01` |
+
+#### Date filtering (no `--since` flag)
+
+FabCLI does **not** have a `--since` flag. Date filtering is done via
+`--filter published_since=YYYY-MM-DD` — and **the caller is responsible
+for computing the date**.
+
+- "Published in the last 7 days": compute `today - 7 days`, format as
+  `YYYY-MM-DD`, then `--filter published_since=YYYY-MM-DD`.
+- "Published since April 1st 2026":
+  `--filter published_since=2026-04-01`.
+- There is no relative-window shorthand (`7d`, `30d`); the server only
+  accepts ISO dates.
+
+If you encounter older docs or recipes that mention `fabcli search
+--since 7d`, replace with the explicit-date `--filter` form above.
+
+#### Known Fab filter keys
+
+Multi-valued (repeatable, but semantics vary per key):
+- `styles` — **AND** (results must match all). Examples: `anime`,
+  `cartoon`, `stylized`, `lowpoly`, `realistic`, `pixelart`, …
+- `technical_features` — examples: `animated`, `rigged`,
+  `destructible`, `customizable`, …
+- `asset_formats` — examples: `metahuman`, `3ds-max`, `blender`,
+  `fbx`, `unreal-engine`, `unity`, …
+- `licenses` — examples: `cc-by`, `uefn-reference-only`, `epic-only`, …
+- `channels` — **OR / union** (results from any channel). Known slugs:
+  `unreal-engine`, `unity`, `uefn`, `metahuman`.
+
+**Multi-value semantics are not uniform across keys.** Fab applies AND
+to `styles` and OR to `channels`. When in doubt, smoke-test with
+single-filter vs. multi-filter and inspect the result intersection.
+
+Scalar booleans (use `1` / `true`):
+- `is_free=1` — permanently free assets only (Fab's `is_free=true`).
+  Does *not* return paid items that are temporarily 100% off — use
+  `min_discount_percentage=100` for those.
+- `is_discounted=true` — any current discount (1%+ off).
+
+Scalar pairs:
+- `min_average_rating` / `max_average_rating` (0-5)
+- `min_price` / `max_price` (decimal)
+
+Scalar singletons:
+- `min_discount_percentage` (1-100). `100` matches Fab's "Limited
+  Time Free" page (`fab.com/limited-time-free`).
+- `listing_types` (`3d-model`, `tool-and-plugin`, `audio`,
+  `material`, …)
+- `categories` (slug)
+- `seller` (seller name)
+
+Date scalar:
+- `published_since=YYYY-MM-DD` — caller computes the date. No
+  relative-window shorthand.
+
+Unknown keys are forwarded raw and yield empty results — Fab does not
+echo or validate filter keys. If you typo `style=anime` (singular)
+instead of `styles=anime`, you'll see zero matches, not an error.
+
+#### Known sort values
+
+`--sort` is a passthrough string. Observed accepted values:
+
+- `-relevance` (default)
+- `-createdAt`, `createdAt`
+- `firstPublishedAt`
+- `price`, `-price`
+- `-min_discount_percentage`
+- `title`, `-title`
+- `-ratings.averageRating`
+
+Fab's accepted set may grow; this is a best-effort enumeration. The
+leading `-` indicates descending.
 
 Response: `{ "results": [{ "uid", "title", "listing_type", "is_free", "is_discounted", "user", "ratings", "seller", "rating", ... }], "count", "cursors": { "next", "previous" } }`
 
@@ -442,8 +542,8 @@ Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir"
 
 ## Fab Pricing Model
 
-Fab's pricing has three "free" conditions — understanding them is
-essential for correct `--free` filtering and `claim` behavior:
+Fab's pricing has three "free" conditions — understanding them
+matters when reading search results and predicting `claim` behavior:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -457,9 +557,13 @@ essential for correct `--free` filtering and `claim` behavior:
 - `price == 0` ($0 asset, `isFree` may still be `false`)
 - `discountedPrice == 0` (100% discount, temporarily free)
 
-**The `--free` flag on `search`** sends `is_free=true` to the API AND
-applies client-side filtering to also include `price==0` and
-`discountedPrice==0` results. This catches all three free conditions.
+**Search filtering:** `--filter is_free=1` sends `is_free=true` to
+the server and matches **only permanently free** items — Fab's
+`is_free=true` server filter does not return temporarily-100%-off
+items. To find "Free for the Month" / "Limited Time Free" assets,
+use `--filter min_discount_percentage=100` instead — that matches
+Fab's own `/limited-time-free` page. Combine the two queries if you
+want the union.
 
 **`claim`** uses the same three-condition check. Paid assets are
 hard-blocked — the POST is never sent. The response includes the
@@ -474,7 +578,7 @@ their Epic account region), not USD.
 
 ```bash
 # Search for assets
-fabcli search -q "sci-fi props" --channel unreal-engine
+fabcli search -q "sci-fi props" --filter channels=unreal-engine
 
 # Inspect a specific result (pipe the UID)
 fabcli search -q "sci-fi props" | jq -r '.results[0].uid' | fabcli listing --stdin --pretty
@@ -504,7 +608,7 @@ fabcli download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./m
 ### Recipe 4: Browse free Unreal Engine assets
 
 ```bash
-fabcli search --free --channel unreal-engine --sort -createdAt --count 20
+fabcli search --filter is_free=1 --filter channels=unreal-engine --sort -createdAt --count 20
 ```
 
 ## Exit Codes
@@ -545,20 +649,49 @@ the token file directly.
 ### Find new free assets this week
 
 ```bash
-fabcli search --free --since 7d
+# Caller computes today - 7 days as YYYY-MM-DD, then passes it through.
+fabcli search --filter is_free=1 --filter published_since=2026-04-23
 ```
 
-`--since 7d` auto-paginates and stops at the first page whose oldest
-item is more than 7 days old, so you get just the recent slice
-instead of the entire catalog. Combine with relative windows (`30d`,
-`90d`) or ISO dates (`--since 2026-04-01`) as needed.
+The server applies `published_since` itself; FabCLI does not paginate
+or post-process by date. For wider windows, compute the date and pass
+it as `published_since=YYYY-MM-DD`.
+
+### Find Fab's "Limited Time Free" / "Free for the Month" assets
+
+```bash
+fabcli search --filter min_discount_percentage=100 --sort=-createdAt
+```
+
+This is the canonical, programmatic way to get the list shown on
+`https://www.fab.com/limited-time-free` — paid items currently
+100%-off, claimable for free until the promotion ends. **Do not use
+`--filter is_free=1`** for this; that only returns *permanently* free
+items and misses the temporary promos. Pipe straight into
+`claim-batch` to grab them all:
+
+```bash
+fabcli search --filter min_discount_percentage=100 \
+  | fabcli claim-batch --from-stdin-json
+```
+
+To find the union of permanently-free + temporarily-100%-off,
+run both queries and merge the UIDs client-side:
+
+```bash
+( fabcli search --filter is_free=1 --filter published_since=2026-04-01 --count 500 ;
+  fabcli search --filter min_discount_percentage=100 --count 100 ) \
+  | jq -s '.[0].results + .[1].results | unique_by(.uid)' \
+  | fabcli claim-batch --from-stdin-json
+```
 
 ### Claim every new free asset this month
 
 ```bash
 export FABCLI_LIBRARY_CACHE=1     # speed up any library reads below
 
-fabcli search --free --since 30d \
+# Caller computes 30 days back as YYYY-MM-DD, e.g. 2026-04-01.
+fabcli search --filter is_free=1 --filter published_since=2026-04-01 \
   | fabcli claim-batch --from-stdin-json
 ```
 
