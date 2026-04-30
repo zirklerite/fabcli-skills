@@ -6,10 +6,31 @@ Fab marketplace through composable shell commands.
 
 ## Install
 
+Two equivalent paths — pick whichever fits your workflow:
+
+### Option A — install from the FabCLI binary (recommended for binary users)
+
+If you already installed FabCLI from a release zip, the binary embeds this
+SKILL.md at compile time. Run:
+
+```bash
+fabcli skill install
+```
+
+This writes `~/.claude/skills/fabcli/SKILL.md` from the binary's embedded
+copy, so the skill version is always in lock-step with your binary's CLI
+surface. Works offline, no GitHub access required.
+
+### Option B — install from this marketplace plugin
+
 ```
 /plugin marketplace add zirklerite/fabcli-skills
 /plugin install fabcli@fabcli-skills
 ```
+
+Pulls the latest `master` of this repo. Useful if you want a SKILL.md
+update between FabCLI binary releases (e.g. recipe additions or trigger
+phrasing tweaks that don't depend on new CLI flags).
 
 ## Prerequisites
 
