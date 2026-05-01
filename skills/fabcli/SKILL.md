@@ -633,14 +633,20 @@ Error JSON on stderr: `{"error":{"kind":"<kind>","message":"<description>"}}`
 - **Windows:** `%APPDATA%\fabcli\token.json`
 - **Linux:** `~/.config/fabcli/token.json`
 
-Override with `FABCLI_TOKEN_PATH` environment variable for multi-account
-use or testing:
+The file is **encrypted at rest** using the OS user keystore
+(DPAPI on Windows, libsecret on Linux). It is no longer
+directly parseable JSON — do **not** try to `cat` / `jq` it.
+Use `fabcli auth status` to check session state.
+
+Override with `FABCLI_TOKEN_PATH` for multi-account workflows or
+testing:
 ```bash
 FABCLI_TOKEN_PATH=/tmp/alt-token.json fabcli auth status
 ```
 
-Prefer `fabcli auth status` to check auth state rather than inspecting
-the token file directly.
+If `auth login` fails with "OS keystore unavailable," the user
+needs to start their keyring daemon (`gnome-keyring-daemon` /
+`kwalletd5` on Linux; DPAPI is always available on Windows 10+).
 
 ## Update FabCLI
 
