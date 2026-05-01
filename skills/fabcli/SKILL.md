@@ -1,5 +1,6 @@
 ---
 name: fabcli
+version: 0.1.0
 description: Use FabCLI to search, browse, inspect, and download assets from the Epic Games / Fab marketplace.
 when_to_use: |
   Use when the user mentions: Fab, Epic Games Store, Unreal marketplace,
@@ -29,17 +30,19 @@ If not installed, the user needs to:
 
 ### Linux support
 
-Two Linux binaries ship per release:
+**Supported Linux platform: Ubuntu 24.04 LTS.** This is the only
+distribution FabCLI is built and tested against. Other distros
+are unsupported — they may work but are not validated.
 
-| Variant | Runtime deps | Fab-session commands (`claim`, rich `ownership`) |
-|---|---|---|
-| **Full** (`fabcli-v*-linux64-full-*.tar.gz`) | `libgtk-3-0`, `libwebkit2gtk-4.1-0`, `libsoup-3.0-0` | ✅ supported |
-| **Slim** (`fabcli-v*-linux64-slim-*.tar.gz`) | none (static musl) | ❌ fails with `"This fabcli build has no WebView support (slim/no-default-features)..."` |
+One Linux binary ships per release: `fabcli-v*-linux64.tar.gz`
+(gnu/glibc, with the webview-backed Fab session capture compiled
+in). Runtime deps: `libgtk-3-0`, `libwebkit2gtk-4.1-0`,
+`libsoup-3.0-0`. Install:
+`sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0 libsoup-3.0-0`.
 
-Known-good distro: **Ubuntu 22.04 LTS** (reference baseline) and 24.04.
-The daemon path that accelerates `claim-batch` is Windows-only today —
-on Linux each call spins up a fresh WebView (~1–2 s per UID). If a user
-hits the slim-build error, direct them to the full tarball.
+The daemon path that accelerates `claim-batch` is Windows-only
+today — on Linux each call spins up a fresh WebView (~1–2 s per
+UID).
 
 ## Authentication
 
@@ -638,6 +641,62 @@ FABCLI_TOKEN_PATH=/tmp/alt-token.json fabcli auth status
 
 Prefer `fabcli auth status` to check auth state rather than inspecting
 the token file directly.
+
+## Update FabCLI
+
+`fabcli update` swaps the running binary in place from the public
+GitHub release. Use it when:
+
+- The user asks how to update FabCLI.
+- The agent sees a stderr line like
+  `fabcli: a newer version (X.Y.Z) is available. Run 'fabcli update' to upgrade.`
+
+| Command | What it does |
+|---|---|
+| `fabcli update` | Download the latest release for the host triple, verify SHA-256 against `SHA256SUMS.txt`, swap the binary in place. Exits 0 with `{"updated": true, "from": "...", "to": "...", "asset": "..."}`. If already at latest, exits 0 with `unchanged: true`. |
+| `fabcli update --check` | Print `{"running": "...", "latest": "...", "newer_available": bool}`; no download. |
+| `fabcli update --to X.Y.Z` | Pin to a specific tag (forward or back). |
+| `fabcli update --force` | Re-download and swap even if already at the latest. |
+
+One archive per platform: Windows ZIP or Linux tar.gz. The asset
+matcher resolves to the host's platform automatically.
+
+The once-a-day **stderr hint** is opt-out:
+
+- `FABCLI_NO_UPDATE_CHECK=1` — disable the hint entirely.
+- `FABCLI_UPDATE_CHECK_TTL_HOURS=<int>` — tune the cache (default 24,
+  `0` disables).
+- `FABCLI_UPDATE_REMOTE=<owner/repo>` — override the GitHub repo
+  (testing/forks).
+
+The hint goes to stderr only — stdout JSON is never touched. If the
+agent sees the hint, surface it to the user; don't try to run
+`fabcli update` automatically (the user's binary may live in a path
+that requires elevated rights to overwrite).
+
+## Manage the Skill from the Binary
+
+`fabcli skill` lets the user install, update, or remove this very
+SKILL.md without leaving the terminal. The binary embeds the canonical
+copy at compile time, so the offline default works on any host that
+already has FabCLI installed.
+
+| Command | What it does |
+|---|---|
+| `fabcli skill install` | Write the embedded SKILL.md to `~/.claude/skills/fabcli/SKILL.md`. Refuses to overwrite a different file unless `--force`. |
+| `fabcli skill update` | Same as `install --force`; reports `old_version → new_version` on stderr. |
+| `fabcli skill uninstall` | Delete the installed SKILL.md (and the `fabcli/` directory if empty). Refuses to delete a file whose frontmatter `name:` isn't `fabcli`, unless `--force`. |
+| `fabcli skill status` | JSON: embedded version, installed version, target path, `matches_embedded`. With `--remote`, also fetches the latest version from the public GitHub repo. |
+| `fabcli skill path` | Print just the resolved install path (single line, no JSON envelope) for scripting. |
+
+**Sources** (`--source <s>`):
+- `embedded` (default) — uses the binary's compile-time copy. Works offline.
+- `github` — fetches from `https://raw.githubusercontent.com/zirklerite/fabcli-skills/master/skills/fabcli/SKILL.md`. Override the URL via `FABCLI_SKILLS_REMOTE_URL` (testing/forks).
+- `path=<file>` — read from a local file.
+
+**Scope** (`--scope <s>`): `user` (default, `~/.claude/skills/`) or `project` (`./.claude/skills/` relative to cwd). `--path <dir>` overrides everything; `FABCLI_SKILLS_DIR=<dir>` is the env-level override (priority: `--path` > env > `--scope project` > `--scope user`).
+
+If the user mentions wanting the FabCLI skill in Claude Code, suggest `fabcli skill install`. The marketplace path (`/plugin marketplace add zirklerite/fabcli-skills`) still works for users who prefer it — both produce the same SKILL.md.
 
 ## Recipes
 
