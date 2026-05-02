@@ -17,9 +17,31 @@ human-readable output). Errors go to stderr as structured JSON.
 
 ## Scope discipline
 
-Each `fabcli search --with-ownership` call materializes the entire
-library, which is slow on a cold cache. Don't fan out queries on a
-hunch — but do think carefully about what the user actually meant.
+Several FabCLI commands materialize the entire library, which is
+slow on a cold cache (~100s for a 1k-item library). Don't fan out
+queries on a hunch — but do think carefully about what the user
+actually meant.
+
+**Never run library-fetching commands in parallel against a cold
+cache.** The library cache is written to disk by the first call
+to finish; runs launched concurrently all start cold and each pay
+the full pagination cost. Run them sequentially — the first call
+warms the cache, the rest read from disk in ~10 ms.
+
+Library-fetching commands (any of these can warm the cache, all
+of them benefit from a warm one):
+
+- `fabcli library` / `fabcli library --refresh`
+- `fabcli search --with-ownership`
+- `fabcli ownership --from-library`
+- `fabcli ownership --batch <uids>` and `fabcli ownership <uid>`
+  (bearer-only fallback path, no Fab session)
+- `fabcli claim-batch --from-library`
+
+If you need to issue several of these, run the first one and let
+it complete before launching the others. With
+`FABCLI_LIBRARY_CACHE=1` set, the second-and-onward calls hit the
+cache and are near-instant.
 
 **Two axes to get right: "what counts as free" and "what time window".**
 
