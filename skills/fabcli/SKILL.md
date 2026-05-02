@@ -465,6 +465,17 @@ Exits `2` (auth_required) with a clear message if no Fab session exists.
 Exits `1` if the POST succeeded but ownership couldn't be
 verified afterward.
 
+**Tiered-license assets.** Many 3D-model listings expose two
+license tiers per UID: Personal (eligibility: < $100K revenue) and
+Professional. When the seller sets Personal to free, `fabcli claim`
+claims it headlessly — no website checkout, no eligibility
+attestation prompt — by selecting the zero-priced offer
+automatically. The success response is the same
+`{"ok":true,"claimed":true,…}` shape; you can confirm the granted
+tier afterward via `fabcli ownership <uid>` and read
+`state.ownership[].name` (e.g. `"Personal"`). Listings where every
+tier is paid are still hard-rejected as `not_free`.
+
 ### Claim-batch (many free assets in one go)
 
 ```bash
