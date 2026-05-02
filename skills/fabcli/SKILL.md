@@ -68,12 +68,20 @@ FabCLI uses a **two-phase auth flow**:
 2. **Headless refresh** — every subsequent command loads the token,
    refreshes if expired, and runs without prompts. No user involvement.
 
-**If you get exit code 2** (`auth_required`), tell the user:
-> "Your FabCLI session has expired. Please run `fabcli auth login`
-> in your terminal to re-authenticate, then I'll retry."
+**If you get exit code 2** (`auth_required`), run `fabcli auth login`
+yourself — don't refuse on "it's interactive" grounds. The
+interactivity is on the *user's* side: a WebView window opens for
+them to sign in / 2FA. From the agent's side it's just a long-lived
+subprocess. Spawn it, let the user click through, and wait for it
+to exit (allow a couple of minutes — 2FA + Fab session capture is
+slow).
 
-Do NOT attempt to run `fabcli auth login` yourself — it requires
-user interaction (WebView window or TTY for paste).
+Resolve `fabcli` from the system PATH. If it isn't on PATH,
+ask the user how they'd like to run it.
+
+If both Epic and Fab sessions are still valid on disk, `auth login`
+short-circuits with `{"ok":true,"already_authenticated":true}` and
+no window opens — safe to call defensively.
 
 ### Auth commands
 
