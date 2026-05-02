@@ -15,6 +15,32 @@ FabCLI is a command-line tool that wraps the Epic Games / Fab marketplace
 APIs. All commands output compact JSON to stdout (add `--pretty` for
 human-readable output). Errors go to stderr as structured JSON.
 
+## Scope discipline
+
+Each `fabcli search --with-ownership` call materializes the entire
+library, which is slow on a cold cache. Don't fan out queries on a
+hunch — but do think carefully about what the user actually meant.
+
+**Two axes to get right: "what counts as free" and "what time window".**
+
+**"Free" is ambiguous on Fab.** There are two distinct buckets:
+1. Permanently free (`is_free=1`)
+2. Limited Time Free / "Free for the Month" promos
+   (`min_discount_percentage=100`) — paid items currently 100% off
+
+If the user's request is ambiguous about which bucket they mean (e.g.
+"show me free assets", "what's free this month"), **ask before
+running**. Don't silently pick one or silently run both. A one-line
+question — "permanently free, the monthly promos, or both?" — costs
+less than a wasted library materialization.
+
+**Time windows are not ambiguous — follow the user's order exactly.**
+"This month" means the current calendar month, not "the last 30
+days" and not "this month plus the active promos that started
+earlier". Compute the date from `currentDate` and pass it as
+`published_since=YYYY-MM-01`. Don't widen the window because more
+results would be "more useful".
+
 ## Prerequisites
 
 FabCLI must be on PATH. Verify: `fabcli --version`
