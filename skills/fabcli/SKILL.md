@@ -560,9 +560,52 @@ progress on stderr.
 
 Flags: `--artifact-id`, `--namespace`, `--asset-id` (required, from
 manifest/library output), `-o, --output` (required), `--platform`
-(optional), `--jobs` (default 8).
+(optional), `--jobs` (default 8), `--force`, `--into-empty`.
 
 Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir":"...","sidecar":".fabcli-asset.json"}`
+
+#### Collision safety
+
+By default, `download` refuses to overwrite pre-existing files in
+`--output`. Before fetching any chunks it walks the manifest's
+target paths, classifies any collisions, and exits 6 with a
+structured error if conflicts are found:
+
+```json
+{"error":{
+  "kind":"output_collision",
+  "message":"<dir> has 3 conflicts",
+  "conflicts":[
+    {"path":"Content/Mesh.uasset","kind":"file_exists"},
+    {"path":"Content/Sub","kind":"is_directory"},
+    {"path":"docs/Readme.txt","kind":"parent_is_file"}
+  ],
+  "total_conflicts":3,
+  "output_dir":"/abs/path/to/output"
+}}
+```
+
+Conflict kinds: `file_exists` (target is a regular file),
+`is_directory` (target is a directory where the manifest expects a
+file), `parent_is_file` (an ancestor on the planned path is a
+regular file). The `conflicts` array is capped at 20 entries;
+`total_conflicts` reports the full count.
+
+The sidecar `.fabcli-asset.json` is included in the collision set —
+re-downloading into a directory with a previous successful download
+will refuse without an explicit overwrite opt-in.
+
+Two flags adjust the default:
+
+- `--force` — skip the preflight; overwrite colliding files
+  silently. Restores pre-collision-safety behavior.
+- `--into-empty` — refuse if `--output` contains *anything* other
+  than `.fabcli-chunks/` (FabCLI's own scratch dir, ignored in all
+  modes). Useful for clean-install workflows.
+
+`--force` and `--into-empty` are mutually exclusive at parse time.
+The `.fabcli-chunks/` scratch dir is always ignored, so a leftover
+from a prior interrupted run never blocks a re-run.
 
 ## Fab Pricing Model
 
