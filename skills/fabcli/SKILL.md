@@ -84,10 +84,6 @@ user interaction (WebView window or TTY for paste).
 | `fabcli auth status` | Check Epic + Fab session health in one call (headless) |
 | `fabcli auth whoami` | Print account_id, display_name, email as JSON |
 
-> **Deprecated:** `fabcli auth fab-login` still exists as a hidden
-> alias that forwards to `auth login` and prints a `[DEPRECATED]`
-> notice on stderr. Always use `auth login` in new code.
-
 Single-step onboarding (once per ~90 days):
 ```bash
 fabcli auth login       # unlocks everything — search, library, claim, ownership, download, ...
