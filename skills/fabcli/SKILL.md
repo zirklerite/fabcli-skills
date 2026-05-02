@@ -680,22 +680,22 @@ that requires elevated rights to overwrite).
 ## Manage the Skill from the Binary
 
 `fabcli skill` lets the user install, update, or remove this very
-SKILL.md without leaving the terminal. The binary embeds the canonical
-copy at compile time, so the offline default works on any host that
-already has FabCLI installed.
+SKILL.md without leaving the terminal. **The skill is fetched from
+the public GitHub mirror** at install time — it is not embedded in
+the binary. If the mirror is unreachable, the command fails with
+exit code 5 and a clear network error.
 
 | Command | What it does |
 |---|---|
-| `fabcli skill install` | Write the embedded SKILL.md to `~/.claude/skills/fabcli/SKILL.md`. Refuses to overwrite a different file unless `--force`. |
+| `fabcli skill install` | Fetch SKILL.md from the public GitHub mirror and write to `~/.claude/skills/fabcli/SKILL.md`. Refuses to overwrite a different file unless `--force`. |
 | `fabcli skill update` | Same as `install --force`; reports `old_version → new_version` on stderr. |
 | `fabcli skill uninstall` | Delete the installed SKILL.md (and the `fabcli/` directory if empty). Refuses to delete a file whose frontmatter `name:` isn't `fabcli`, unless `--force`. |
-| `fabcli skill status` | JSON: embedded version, installed version, target path, `matches_embedded`. With `--remote`, also fetches the latest version from the public GitHub repo. |
+| `fabcli skill status [--remote]` | JSON: installed version, target path. With `--remote`, also fetches the latest version from the public GitHub repo and adds `matches_remote`. |
 | `fabcli skill path` | Print just the resolved install path (single line, no JSON envelope) for scripting. |
 
 **Sources** (`--source <s>`):
-- `embedded` (default) — uses the binary's compile-time copy. Works offline.
-- `github` — fetches from `https://raw.githubusercontent.com/zirklerite/fabcli-skills/master/skills/fabcli/SKILL.md`. Override the URL via `FABCLI_SKILLS_REMOTE_URL` (testing/forks).
-- `path=<file>` — read from a local file.
+- `github` (default) — fetches from `https://raw.githubusercontent.com/zirklerite/fabcli-skills/master/skills/fabcli/SKILL.md`. Override the URL via `FABCLI_SKILLS_REMOTE_URL` (testing/forks). Network-required.
+- `path=<file>` — read from a local file (offline / pre-staged install).
 
 **Scope** (`--scope <s>`): `user` (default, `~/.claude/skills/`) or `project` (`./.claude/skills/` relative to cwd). `--path <dir>` overrides everything; `FABCLI_SKILLS_DIR=<dir>` is the env-level override (priority: `--path` > env > `--scope project` > `--scope user`).
 
