@@ -598,10 +598,23 @@ their Epic account region), not USD.
 ```bash
 # Search for assets
 fabcli search -q "sci-fi props" --filter channels=unreal-engine
+```
 
-# Inspect a specific result (pipe the UID)
+Pick a UID from `.results[].uid` in the JSON, then:
+
+```bash
+fabcli listing <uid> --pretty
+```
+
+This works everywhere (bash, PowerShell, cmd) without external
+tools. If you have `jq` installed, you can one-line it:
+
+```bash
 fabcli search -q "sci-fi props" | jq -r '.results[0].uid' | fabcli listing --stdin --pretty
 ```
+
+Both forms are fine — the no-jq form is the default so it works
+on bare Windows shells.
 
 ### Recipe 2: Check ownership before recommending
 
@@ -757,7 +770,22 @@ fabcli search --filter min_discount_percentage=100 \
 ```
 
 To find the union of permanently-free + temporarily-100%-off,
-run both queries and merge the UIDs client-side:
+run both queries and feed each into `claim-batch` in turn —
+`claim-batch` is idempotent (already-owned UIDs short-circuit
+to `already_owned: true`), so duplicate UIDs across the two
+result sets don't double-claim:
+
+```bash
+fabcli search --filter is_free=1 --filter published_since=2026-04-01 --count 500 \
+  | fabcli claim-batch --from-stdin-json
+
+fabcli search --filter min_discount_percentage=100 --count 100 \
+  | fabcli claim-batch --from-stdin-json
+```
+
+This works on any shell — `claim-batch --from-stdin-json` parses
+search output directly, no `jq` required. If you have `jq`, the
+union-then-claim one-liner also works fine:
 
 ```bash
 ( fabcli search --filter is_free=1 --filter published_since=2026-04-01 --count 500 ;
