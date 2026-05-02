@@ -155,7 +155,7 @@ fabcli search --query "medieval kitbash" --filter channels=unreal-engine --filte
 flags are non-filter concerns: `--query` (text), `--sort` (ordering),
 `--count` and `--cursor` (pagination).
 
-Flags (five total):
+Flags:
 - `-q, --query` — text search.
 - `--sort` — see "Known sort values" below. Leading `-` means
   descending (Fab API convention). Both `--sort=-createdAt` and
@@ -167,6 +167,11 @@ Flags (five total):
   same-key invocations preserve order — Fab's multi-valued
   convention. See "How to do X" recipes and "Known Fab filter keys"
   below.
+- `--with-ownership` — decorate each result row with `owned: bool`
+  indicating whether the listing is already in the authenticated
+  account's library. Materializes the library once per invocation
+  (cache-aware via `FABCLI_LIBRARY_CACHE`); per-row cost is O(1).
+  See "Search and check ownership in one go" recipe below.
 
 #### How to do X (recipes)
 
@@ -623,6 +628,19 @@ UID="some-listing-uid"
 fabcli ownership "$UID"
 # Check if .licenses is non-empty or .acquired is true
 ```
+
+### Recipe 2b: Search and check ownership in one go
+
+```bash
+export FABCLI_LIBRARY_CACHE=1                # speed up repeated calls
+fabcli search -q "medieval" --filter channels=unreal-engine --with-ownership
+```
+
+Each result row gains an `owned: bool` field. The library is
+fetched once per invocation (or read from disk if the cache is
+warm); per-row check is in-memory. Use this whenever you'd
+otherwise be tempted to run `search` then `ownership --batch`
+separately.
 
 ### Recipe 3: Download an owned asset
 
