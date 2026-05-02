@@ -531,7 +531,8 @@ Downloads all files: checks disk space first (needs ~2x asset size),
 parallel chunk fetching to temp files, SHA1 verification, file
 reassembly, directory structure preserved. No memory limit — works for
 any asset size. Writes `.fabcli-asset.json` sidecar with metadata for
-UE5CLI integration. Shows progress on stderr.
+future UE5CLI integration (companion tool, not yet released). Shows
+progress on stderr.
 
 Flags: `--artifact-id`, `--namespace`, `--asset-id` (required, from
 manifest/library output), `-o, --output` (required), `--platform`
@@ -600,8 +601,8 @@ fabcli library --pretty
 # 2. Download (artifact_id, namespace, asset_id from library output)
 fabcli download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./my-asset/
 
-# 3. If UE5CLI is available, install into project:
-# ue5cli install-asset ./my-asset/ --project C:\Projects\MyGame
+# 3. Import into your UE project manually (UE5CLI companion tool
+#    that automates this step is planned but not yet released).
 ```
 
 ### Recipe 4: Browse free Unreal Engine assets
@@ -778,7 +779,8 @@ download` on everything owned.
 ## What FabCLI Does NOT Do
 
 - **Does not install assets into UE projects** — `fab download` puts
-  files in an output directory. Use UE5CLI (`ue5cli install-asset`)
-  for automated project placement, or move files manually.
+  files in an output directory. UE5CLI (planned companion tool, not
+  yet released) will automate project placement; for now, move files
+  manually.
 - **Does not manage Unreal Engine projects** — no project creation,
   plugin installation, or build management.
