@@ -32,16 +32,23 @@ Library-fetching commands (any of these can warm the cache, all
 of them benefit from a warm one):
 
 - `fabcli library` / `fabcli library --refresh`
-- `fabcli search --with-ownership`
 - `fabcli ownership --from-library`
 - `fabcli ownership --batch <uids>` and `fabcli ownership <uid>`
-  (bearer-only fallback path, no Fab session)
+  *only when no Fab session* (bearer-only fallback path)
 - `fabcli claim-batch --from-library`
 
 If you need to issue several of these, run the first one and let
 it complete before launching the others. With
 `FABCLI_LIBRARY_CACHE=1` set, the second-and-onward calls hit the
 cache and are near-instant.
+
+**`fabcli search --with-ownership` is no longer in this list when
+a Fab session is available.** It now uses Fab's bulk listings-states
+endpoint directly (one HTTP call per ~24 result rows), so even a
+100-result search completes in <2s regardless of library size or
+cache state. The library-walk fallback only fires in the unusual
+case where no Fab session is present (bearer-only environment) or
+the bulk endpoint returns an unexpected error.
 
 **Two axes to get right: "what counts as free" and "what time window".**
 
@@ -62,6 +69,33 @@ days" and not "this month plus the active promos that started
 earlier". Compute the date from `currentDate` and pass it as
 `published_since=YYYY-MM-01`. Don't widen the window because more
 results would be "more useful".
+
+**Don't make the user wait while you poll opaquely.** Most FabCLI
+commands return JSON to stdout in under 2 s. When a command does
+take longer (`library` on a cold cache, `claim-batch` over many
+UIDs, the first `--with-ownership` call after a daemon spawn),
+read its output as it lands rather than spinning in a wait-loop
+the user can't see:
+
+- If your run-shell tool returns a background task ID, read the
+  output file directly each turn (`cat <output-file>`). The
+  fabcli command writes its full JSON the moment it completes —
+  partial reads are fine, no marker needed.
+- Avoid wait patterns like `until grep -q "<marker>" <file>; do
+  sleep 2; done` — they add 2–4 s of polling latency per cycle
+  and stall opaquely. A 2-second fabcli call has been observed
+  appearing to hang for 5 minutes through such loops.
+- Diagnostic detours (checking process lists, killing daemons)
+  compound the perceived slowness. The fabcli daemon is supposed
+  to stay alive between calls; a long-running `fabcli` PID is
+  almost always the daemon idling for its next caller, not the
+  current command stuck.
+- For genuinely long operations, run foreground when possible
+  (the user sees stderr progress lines) and reserve scheduled
+  wakeups for cases that legitimately take minutes.
+
+If a fabcli call appears to hang for more than ~30 s, *check the
+output file before assuming it's stuck.* It's almost always done.
 
 ## Prerequisites
 
@@ -217,9 +251,11 @@ Flags:
   below.
 - `--with-ownership` — decorate each result row with `owned: bool`
   indicating whether the listing is already in the authenticated
-  account's library. Materializes the library once per invocation
-  (cache-aware via `FABCLI_LIBRARY_CACHE`); per-row cost is O(1).
-  See "Search and check ownership in one go" recipe below.
+  account's library. With a Fab session, uses Fab's bulk
+  listings-states endpoint (1 HTTP call per ~24 results, <2s for
+  any typical search). Falls back to a library walk only when no
+  Fab session is available. See "Search and check ownership in
+  one go" recipe below.
 
 #### How to do X (recipes)
 
@@ -382,7 +418,7 @@ Env vars:
 - `FABCLI_LIBRARY_CACHE` — `1` / `true` / `yes` enables cache
   reads and writes. Anything else leaves today's always-live
   behaviour intact.
-- `FABCLI_LIBRARY_CACHE_TTL` — seconds; default `3600` (1 hour).
+- `FABCLI_LIBRARY_CACHE_TTL` — seconds; default `86400` (24 hours).
   `0` effectively disables reads without unsetting the main env.
 
 **Strict env gating.** If `FABCLI_LIBRARY_CACHE` is not set,
@@ -723,15 +759,20 @@ fabcli ownership "$UID"
 ### Recipe 2b: Search and check ownership in one go
 
 ```bash
-export FABCLI_LIBRARY_CACHE=1                # speed up repeated calls
 fabcli search -q "medieval" --filter channels=unreal-engine --with-ownership
 ```
 
-Each result row gains an `owned: bool` field. The library is
-fetched once per invocation (or read from disk if the cache is
-warm); per-row check is in-memory. Use this whenever you'd
-otherwise be tempted to run `search` then `ownership --batch`
+Each result row gains an `owned: bool` field. With a Fab session
+(the common case) FabCLI calls Fab's bulk listings-states endpoint
+in batches of 24 — a 100-result search takes <2s regardless of
+library size. No environment variables needed. Use this whenever
+you'd otherwise be tempted to run `search` then `ownership --batch`
 separately.
+
+`FABCLI_LIBRARY_CACHE=1` is no longer required for this recipe —
+the bulk-states fast path doesn't touch the library cache. The env
+var still matters for `library`, `ownership --from-library`, and
+`claim-batch --from-library`.
 
 ### Recipe 3: Download an owned asset
 
