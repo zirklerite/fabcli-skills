@@ -643,9 +643,23 @@ Response: `[{ "artifact_id", "asset_format", "distribution_points": [{ "url", "s
 ### Download
 
 ```bash
-fabcli download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/
-fabcli download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/ --platform Windows --jobs 16
+fabcli download <uid> -o ./my-asset/                              # UID form (preferred)
+fabcli download --uid <uid> -o ./my-asset/                        # UID via flag
+echo <uid> | fabcli download --stdin -o ./my-asset/               # UID via pipe
+fabcli download <uid> -o ./my-asset/ --engine UE_5.4              # disambiguate multi-version
+fabcli download --artifact-id X --namespace Y --asset-id Z -o ./my-asset/  # explicit-IDs (legacy)
 ```
+
+Two mutually-exclusive forms:
+
+- **UID form** (recommended). Pass a Fab listing UID; the command
+  reads your library to resolve `artifact_id`/`namespace`/`asset_id`
+  automatically. Set `FABCLI_LIBRARY_CACHE=1` to make repeat
+  invocations near-instant — the first call still pays the
+  ~100 s library-walk on a large cold library.
+- **Explicit-IDs form**. Pass `--artifact-id` + `--namespace` +
+  `--asset-id` directly. Useful when scripting against fixed
+  catalog coordinates that don't change per release.
 
 Downloads all files: checks disk space first (needs ~2x asset size),
 parallel chunk fetching to temp files, SHA1 verification, file
@@ -654,9 +668,24 @@ any asset size. Writes `.fabcli-asset.json` sidecar with metadata for
 future UE5CLI integration (companion tool, not yet released). Shows
 progress on stderr.
 
-Flags: `--artifact-id`, `--namespace`, `--asset-id` (required, from
-manifest/library output), `-o, --output` (required), `--platform`
-(optional), `--jobs` (default 8), `--force`, `--into-empty`.
+Flags: `<uid>` / `--uid <UID>` / `--stdin` (UID form, mutually
+exclusive); `--engine UE_X.Y` (UID form only — disambiguates a
+listing with multiple project versions); `--artifact-id` +
+`--namespace` + `--asset-id` (explicit-IDs form, all three
+required); `-o, --output` (required); `--platform` (optional);
+`--jobs` (default 8); `--force`, `--into-empty`.
+
+#### Resolver errors (UID form)
+
+- `not_owned` (exit 2) — the UID isn't in your library. Run
+  `fabcli claim <uid>` if it's free, or buy it on Fab. Distinct
+  from `auth_required` (which means the session itself is bad).
+- `ambiguous_artifact` (exit 6) — the listing exposes multiple
+  project versions and/or platforms. The error payload includes
+  an `available` array listing each version's `engine_versions`
+  and `target_platforms`, so you can pick a value and re-run with
+  `--engine UE_X.Y` (and/or `--platform <P>`) without another
+  network round-trip.
 
 Response: `{"ok":true,"files":N,"total_bytes":M,"elapsed_seconds":T,"output_dir":"...","sidecar":".fabcli-asset.json"}`
 
@@ -789,14 +818,47 @@ var still matters for `library`, `ownership --from-library`, and
 ### Recipe 3: Download an owned asset
 
 ```bash
-# 1. List library to find artifact info
-fabcli library --pretty
+# UID form — one call, no manual ID juggling.
+fabcli download <uid> -o ./my-asset/
 
-# 2. Download (artifact_id, namespace, asset_id from library output)
+# Multi-version listing? Disambiguate with --engine:
+fabcli download <uid> -o ./my-asset/ --engine UE_5.4
+
+# Then import into your UE project manually (UE5CLI companion tool
+# that automates this step is planned but not yet released).
+```
+
+The UID form reads your library to map the listing UID to its
+Epic catalog coordinates. With `FABCLI_LIBRARY_CACHE=1` set,
+repeat invocations are near-instant; the first cold-cache call
+pays the standard ~100 s library walk.
+
+**Recovering from `ambiguous_artifact`.** When a listing exposes
+multiple project versions and/or platforms, `download <uid>`
+exits 6 with a JSON error whose `available` array lists the
+options. Pick a value and re-run with `--engine` (and/or
+`--platform`) — no extra network round-trip needed:
+
+```bash
+$ fabcli download <uid> -o ./out/
+{"error":{"kind":"ambiguous_artifact","uid":"<uid>","available":[
+  {"engine_versions":["UE_4.27","UE_5.0"],"target_platforms":["Windows"]},
+  {"engine_versions":["UE_5.4","UE_5.5"],"target_platforms":["Windows","Linux"]}
+]}}
+$ fabcli download <uid> -o ./out/ --engine UE_5.4 --platform Windows
+```
+
+**Recovering from `not_owned`.** If the UID isn't in your library,
+`download` exits 2 with `not_owned`. Run `fabcli claim <uid>` if
+the asset is free, or buy it on Fab. Distinct from
+`auth_required` (which means the session itself expired).
+
+**Legacy explicit-IDs form.** Still supported; useful for
+scripting against fixed catalog coordinates that don't change
+per release:
+
+```bash
 fabcli download --artifact-id "$AID" --namespace "$NS" --asset-id "$ASID" -o ./my-asset/
-
-# 3. Import into your UE project manually (UE5CLI companion tool
-#    that automates this step is planned but not yet released).
 ```
 
 ### Recipe 4: Browse free Unreal Engine assets
