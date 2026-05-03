@@ -151,9 +151,6 @@ FabCLI uses a **two-phase auth flow**:
    with Epic credentials + 2FA once, and the code is captured
    automatically.
 
-   Use `fabcli auth login --manual` for the paste flow if the WebView
-   isn't available.
-
 2. **Headless refresh** — every subsequent command loads the token,
    refreshes if expired, and runs without prompts. No user involvement.
 
