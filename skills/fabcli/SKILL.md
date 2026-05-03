@@ -32,9 +32,9 @@ Library-fetching commands (any of these can warm the cache, all
 of them benefit from a warm one):
 
 - `fabcli library` / `fabcli library --refresh`
-- `fabcli ownership --from-library`
-- `fabcli ownership --batch <uids>` and `fabcli ownership <uid>`
-  *only when no Fab session* (bearer-only fallback path)
+- `fabcli ownership --from-library` (UID source — rich state still
+  comes from the bulk listings-states endpoint, which requires a
+  live Fab session)
 - `fabcli claim-batch --from-library`
 
 If you need to issue several of these, run the first one and let
@@ -42,13 +42,20 @@ it complete before launching the others. With
 `FABCLI_LIBRARY_CACHE=1` set, the second-and-onward calls hit the
 cache and are near-instant.
 
-**`fabcli search --with-ownership` is no longer in this list when
-a Fab session is available.** It now uses Fab's bulk listings-states
-endpoint directly (one HTTP call per ~24 result rows), so even a
-100-result search completes in <2s regardless of library size or
-cache state. The library-walk fallback only fires in the unusual
-case where no Fab session is present (bearer-only environment) or
-the bulk endpoint returns an unexpected error.
+**Cache discoverability tip.** When a library fetch happens AND
+`FABCLI_LIBRARY_CACHE` is unset, FabCLI prints a one-line stderr
+hint after the response lands on stdout, pointing the user at the
+env var. The tip is rate-limited to once per 24h via a sentinel
+file; suppress permanently with `FABCLI_NO_TIPS=1`. Doesn't fire
+on cache reads or when caching is already enabled.
+
+**Ownership-flavored commands now require a Fab session, period.**
+`fabcli ownership` (single, `--batch`, `--from-stdin`,
+`--from-library`) and `fabcli search --with-ownership` exit 2
+with `auth_required` if the Fab session has expired or never
+existed. Re-login via `fabcli auth login`. There is no library-walk
+fallback for ownership state — it was a surprise slow path that
+now fails fast and clearly.
 
 **Two axes to get right: "what counts as free" and "what time window".**
 
@@ -251,11 +258,12 @@ Flags:
   below.
 - `--with-ownership` — decorate each result row with `owned: bool`
   indicating whether the listing is already in the authenticated
-  account's library. With a Fab session, uses Fab's bulk
-  listings-states endpoint (1 HTTP call per ~24 results, <2s for
-  any typical search). Falls back to a library walk only when no
-  Fab session is available. See "Search and check ownership in
-  one go" recipe below.
+  account's library. Uses Fab's bulk listings-states endpoint
+  (1 HTTP call per ~24 results, <2s for any typical search).
+  **Requires a live Fab session** — no library-walk fallback.
+  Exit 2 with `auth_required` if the session is missing or
+  expired; run `fabcli auth login` to refresh. See "Search and
+  check ownership in one go" recipe below.
 
 #### How to do X (recipes)
 
@@ -429,10 +437,9 @@ per script/session (or use `--cache` per call).
 **Which commands read the cache** (when enabled):
 
 - `fabcli library`
-- `fabcli ownership --from-library`
-- `fabcli ownership --batch <uids>` (bearer-only fallback path
-  without a Fab session)
-- `fabcli ownership <uid>` (same bearer-only fallback)
+- `fabcli ownership --from-library` (UID source only — rich state
+  comes from the Fab-session-authenticated bulk listings-states
+  endpoint)
 - `fabcli claim-batch --from-library`
 
 Every other command is unaffected (they don't touch the library).
@@ -504,29 +511,34 @@ fabcli ownership --from-stdin                # batch (newline-delimited)
 fabcli ownership --from-library              # every UID in the library
 ```
 
-Reports whether a listing is owned. With a Fab session (established
-automatically by `auth login`), queries
-`/i/users/me/listings-states/{uid}` through a hidden WebView and
-returns richer state (entitlement id, held licenses, wishlist
-flag). Without a session, falls back to matching the listing UID
-against the user's library (`customAttributes[].ListingIdentifier`)
-— works on headless systems too.
+Reports whether a listing is owned. **Requires a live Fab session**
+(established automatically by `auth login`) — exits 2 with
+`auth_required` and a "run `fabcli auth login`" message if missing
+or expired. There is no library-walk fallback. All variants
+(single, `--batch`, `--from-stdin`, `--from-library`) chunk UIDs
+through Fab's bulk listings-states endpoint (24 listingIds per
+call) for the rich state.
 
-Response shape depends on which path ran; both include
-`listingUid`, `owned`, and a `source` field identifying the path:
+`--from-library` is special: it walks the library (bearer-auth) to
+get the *UID list*, then chunks those UIDs through bulk
+listings-states (Fab session) for per-UID rich state. Output shape
+is identical to `--batch` over the library's UIDs.
+
+Response shape:
 
 ```json
-// Fab-session path
-{"listingUid":"...","owned":true,"source":"fab_session","state":{"acquired":true,"entitlementId":"...","ownership":[...],"wishlisted":false,...}}
+// Single (--<uid>, --stdin)
+{"listingUid":"...","owned":true,"source":"fab_session","state":{"acquired":true,"entitlementId":"...","wishlisted":false,"uid":"..."}}
 
-// Library-derived path (no session, or session expired)
-{"listingUid":"...","owned":true,"source":"library","entitlement":{"assetId":"...","title":"...","projectVersions":[...]}}
-
-// Batch (any `--batch` / `--from-stdin` / `--from-library` flag)
+// Batch (any --batch / --from-stdin / --from-library)
 {"ok":true,"results":[{...},{...},{...}],"meta":{"total":3}}
+
+// Unknown UID (Fab silently drops from bulk response)
+{"listingUid":"<bogus>","owned":false,"source":"fab_session"}
 ```
 
-Single-UID calls still emit the flat shape for back-compat.
+`source` is always `"fab_session"`. A single shape, no path
+branching for callers.
 
 ### Claim (free assets only)
 
